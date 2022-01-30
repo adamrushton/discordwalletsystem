@@ -238,9 +238,9 @@ const createNewUser = async (userID, message) => {
 const totalWageredLeaderboard = async (userID, message) => {
     // await 
 }
-const depositWageredLeaderboard = async (userID, message) => {
+const depositTotalLeaderboard = async (userID, message) => {
     //  await 
 }
-const withdrawWageredLeaderboard = async (userID, message) => {
+const withdrawTotalLeaderboard = async (userID, message) => {
     //  await 
 }
