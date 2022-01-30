@@ -1,36 +1,23 @@
 require('dotenv').config();
 
+const NO_PERMISSIONS = 'You do not have permission to use this command';
 const { Client, Intents, Permissions } = require('discord.js');
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+const CasinoUser = require('./schemas/casinouserschema');
 
-const mongo = require('./mongo');
 const mongoose = require('mongoose');
-const Customers = require('./balanceschema');
+mongoose.connect(process.env.CASINO_MONGODB_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then((m) => {
+    console.log('Connected to DB');
+}).catch((err) => console.log(err));
 
-const NO_PERMISSIONS = 'You do not have permission to use this command';
+client.login(process.env.CASINO_TOKEN);
 
 client.on('ready', async () => {
-    await mongo();
-    console.log(client.user.username + ' is online');
+    console.log(client.user.username + ' has logged in.');
 });
-
-function isNumber(userID) {
-    return /^\d+$/.test(userID);
-}
-
-function dice(min, max) { // min and max included 
-    return Math.floor(Math.random() * (max - min + 1) + min)
-}
-
-var coinflip = ['Heads', 'Tails']
-
-function flip() {
-    return coinflip[dice(0, 1)];
-}
-
-function getUserID(userTagged) {
-    return userTagged.slice(3, userTagged.length - 1);
-}
 
 client.on('message', async (message) => {
     const args = message.content.slice().trim().split(' ');
@@ -131,6 +118,24 @@ client.on('message', async (message) => {
     }
 });
 
+function isNumber(userID) {
+    return /^\d+$/.test(userID);
+}
+
+function dice(min, max) { // min and max included 
+    return Math.floor(Math.random() * (max - min + 1) + min)
+}
+
+var coinflip = ['Heads', 'Tails']
+
+function flip() {
+    return coinflip[dice(0, 1)];
+}
+
+function getUserID(userTagged) {
+    return userTagged.slice(3, userTagged.length - 1);
+}
+
 const updatebalance = async (args, message) => {
     console.log('User ID: ' + args[0]);
     console.log('Amount: ' + args[1]);
@@ -140,20 +145,19 @@ const updatebalance = async (args, message) => {
         return;
     }
     console.log('Looking for ID: ' + userID);
-
-    var customer = await Customers.findOne({ unique_id: userID });
+    var customer = await CasinoUser.findOneAndUpdate({ unique_id: userID });
 
     if (customer == null) {
         console.log('ID Doesnt exist, creating & reassigning customer...');
         createNewUser(userID, message);
-        customer = await Customers.findOne({ unique_id: userID });
+        customer = await CasinoUser.findOne({ unique_id: userID });
     }
-    if (args[1] > 0) {
+    if (args.length > 0 && customer != null) {
         console.log('Updating balance of ' + userID + ' by adding ' + args[1]);
         customer.balance += parseFloat(args[1]);
-        const updateCustomer = await Customers.findOneAndUpdate({ unique_id: userID }, { balance: customer.balance });
-        message.channel.send('Added ' + args[1] + ' to the balance of ' + args[0] + ' (' + args[0] + ') New balance: ' + customer.balance);
-    } else {
+        const updateCustomer = await CasinoUser.findOneAndUpdate({ unique_id: userID }, { balance: customer.balance });
+        message.channel.send('Added ' + args[1] + ' to the balance of ' + args[0] + ' New balance: ' + customer.balance);
+    } else if (customer != null) {
         message.channel.send('Invalid deposit: ' + args[1]);
     }
 }
@@ -163,7 +167,7 @@ const displayBalance = async (args, message) => {
     switch (args.length) {
         case 0:
             console.log('no parameters found, searching for the user who typed the command');
-            var customer = await Customers.findOne({ unique_id: message.member.id });
+            var customer = await CasinoUser.findOne({ unique_id: message.member.id });
             if (customer == null) {
                 message.channel.send('User ' + message.member.user.username + ' (' + message.member.id + ') not found in the database, you need to deposit first.');
                 return;
@@ -173,20 +177,24 @@ const displayBalance = async (args, message) => {
             break;
 
         case 1:
-            const userID = getUserID(args[0]);
-            console.log('User ID: ' + userID);
+            if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+                const userID = getUserID(args[0]);
+                console.log('User ID: ' + userID);
 
-            if (!isNumber(userID)) {
-                message.channel.send('Invalid user input');
-                return;
+                if (!isNumber(userID)) {
+                    message.channel.send('Invalid user input');
+                    return;
+                }
+                customer = await CasinoUser.findOne({ unique_id: userID });
+                if (customer == null) {
+                    message.channel.send('User ' + args[0] + ' (' + userID + ') not found in the database, you need to deposit first.');
+                    return;
+                }
+                console.log(customer.balance);
+                message.channel.send('Balance of ' + args[0] + ' is ' + customer.balance);
+            } else {
+                message.channel.send(NO_PERMISSIONS);
             }
-            customer = await Customers.findOne({ unique_id: userID });
-            if (customer == null) {
-                message.channel.send('User ' + args[0] + ' (' + userID + ') not found in the database, you need to deposit first.');
-                return;
-            }
-            console.log(customer.balance);
-            message.channel.send('Balance of ' + args[0] + ' is ' + customer.balance);
             break;
     }
 }
@@ -197,8 +205,8 @@ const clearBalance = async (args, message, member) => {
 
     if (args.length == 0) {
         console.log('no parameters found ,searching the for user who typed the command');
-        await Customers.findOneAndUpdate({ unique_id: member.id, balance: 0 });
-        const checkCustomerBalance = await Customers.findOne({ unique_id: member.id });
+        await CasinoUser.findOneAndUpdate({ unique_id: member.id, balance: 0 });
+        const checkCustomerBalance = await CasinoUser.findOne({ unique_id: member.id });
         message.channel.send('Balance of ' + member.user.username + ' is now ' + checkCustomerBalance.balance);
     }
 }
@@ -206,16 +214,17 @@ const clearBalance = async (args, message, member) => {
 const createNewUser = async (userID, message) => {
     try {
         console.log('start of createnewuser: userid: ' + userID);
-        const newCustomer = await Customers.create({
-            unique_id: userID,
-            balance: 0
-            //    total_wagered: 0,
-            //    total_deposited: 0,
-            //     total_withdrawn: 0,
-            //     largest_bet: 0
+        const newCustomer = await CasinoUser.create({
+            uniqueid: userID,
+            balance: 0,
+            totaldeposited: 0,
+            totalwithdrawn: 0,
+            totalwagered: 0,
+            largestbet: 0
         });
+
         console.log('new customer formed');
-        await newCustomer.save();
+        const savedUser = await newCustomer.save();
 
         console.log('new customer created');
         message.channel.send('New user ' + userID + ' created');
@@ -235,4 +244,3 @@ const depositWageredLeaderboard = async (userID, message) => {
 const withdrawWageredLeaderboard = async (userID, message) => {
     //  await 
 }
-client.login(process.env.TRUSTEDDUELS_BOT_TOKEN);
