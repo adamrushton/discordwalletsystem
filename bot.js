@@ -13,9 +13,19 @@ const NO_PERMISSIONS = 'You do not have permission to use this command';
 const { Client, Intents, Permissions } = require('discord.js');
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 const CasinoUser = require('./schemas/casinouserschema');
-
 const mongoose = require('mongoose');
-const casinouserschema = require('./schemas/casinouserschema');
+
+/*
+service fee vars
+*/
+var percentage = 0;
+var multiplier = 0;
+var amountToSubtract = 0;
+var potAmount = 0;
+var cent = 100;
+// end
+
+
 mongoose.connect(process.env.CASINO_MONGODB_URL, {
     useNewUrlParser: true,
     useUnifiedTopology: true
@@ -73,16 +83,21 @@ client.on('message', async (message) => {
 
         case 'flip':
             var choice = args[0];
-            var amount = args[1];
+            var amount = parseFloat(args[1]);
             var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
+            var takeBetFromBalance = customer.balance - (parseFloat(amount));
 
             if (isTicketChannel(message.channel.name) && args.length == 2 && customer != null && isHeadsOrTails(args[0])) {
                 var flipResult = flip();
                 var mainFlipMessage = '**' + message.member.user.username + '** flipped a coin and landed on **' + flipResult + '**';
                 if (choice.toLowerCase() === flipResult.toLowerCase()) {
-                    var updatedBalance = customer.balance + parseFloat(amount);
-                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance });
-                    message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ' + updatedBalance);
+                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: takeBetFromBalance });
+                    console.log('set their balance from: ' + takeBetFromBalance + ' to ' + takeBetFromBalance);
+                    console.log('victory amount: ' + getVictoryAmount(parseFloat(amount)));
+                    var updatedBalance = takeBetFromBalance + getVictoryAmount(parseFloat(amount));
+                    console.log('updated balance: ' + parseFloat(updatedBalance));
+                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: parseFloat(updatedBalance) });
+                    message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ' + updatedBalance + '(' + percentage + '%)');
                 } else {
                     var updatedBalance = customer.balance - parseFloat(amount);
                     await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance });
@@ -208,7 +223,7 @@ async function updatebalance(args, message) {
     if (args.length > 0 && customer != null) {
         console.log('Updating balance of ' + userID + ' by adding ' + args[1]);
         customer.balance += parseFloat(args[1]);
-        const updateCustomer = await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance });
+        await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance });
         message.channel.send('Added ' + args[1] + ' to the balance of ' + args[0] + ' New balance: ' + customer.balance);
     } else if (customer != null) {
         message.channel.send('Invalid deposit: ' + args[1]);
@@ -288,10 +303,7 @@ async function createNewUser(userID, message, firstWager) {
         largestbet: 0
     });
 
-    console.log('new customer formed');
     await newCustomer.save();
-
-    console.log('new customer created');
     message.channel.send('New user ' + userID + ' created with a first wager of ' + firstWager);
 }
 
@@ -313,4 +325,24 @@ async function depositLeaderboard(userID, message) {
 }
 async function withdrawLeaderboard(userID, message) {
     //  await 
+}
+
+function getVictoryAmount(bet) {
+    potAmount = bet + bet;
+    if (potAmount >= 0.0 && potAmount < 1000.0) {
+        percentage = 5;
+    } else if (potAmount >= 1000.0 && potAmount < 2000.0) {
+        percentage = 7.5;
+    } else if (potAmount >= 2000.0 && potAmount < 10000.0) {
+        percentage = 10;
+    } else if (potAmount >= 10000.0) {
+        percentage = 12.5;
+    }
+    multiplier = percentage / cent;
+    amountToSubtract = potAmount * multiplier;
+    return parseFloat(potAmount - amountToSubtract);
+}
+
+async function getPercentage() {
+    return percentage;
 }
