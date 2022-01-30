@@ -1,5 +1,14 @@
 require('dotenv').config();
 
+/*
+TO-DO List
+Dice and Coinflip should update balance
+stake <amount> should be added
+win/loss should update balance
+dice amount gamenumber
+coinflip amount heads/tails
+- check for enough funds
+*/
 const NO_PERMISSIONS = 'You do not have permission to use this command';
 const { Client, Intents, Permissions } = require('discord.js');
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
@@ -98,8 +107,8 @@ client.on('message', async (message) => {
             }
             break;
 
-        case 'total':
-            total();
+        case 'allbalances':
+            allbalances();
             break;
 
         case 'wageredleaderboard':
@@ -221,11 +230,11 @@ const clearBalance = async (args, message, member) => {
     }
 }
 
-const createNewUser = async (userID, message, firstDeposit) => {
+const createNewUser = async (userID, message, firstWager) => {
     console.log('start of createnewuser: userid: ' + userID);
     const newCustomer = await CasinoUser.create({
         uniqueid: userID,
-        balance: firstDeposit,
+        balance: firstWager,
         totaldeposited: 0,
         totalwithdrawn: 0,
         totalwagered: 0,
@@ -236,10 +245,10 @@ const createNewUser = async (userID, message, firstDeposit) => {
     const savedUser = await newCustomer.save();
 
     console.log('new customer created');
-    message.channel.send('New user ' + userID + ' created');
+    message.channel.send('New user ' + userID + ' created with a first wager of ' + firstWager);
 }
 
-const total = async () => {
+const allbalances = async () => {
     CasinoUser.find({}, function (err, users) {
         var userMap = {};
 
