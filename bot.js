@@ -6,6 +6,7 @@ const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_
 const CasinoUser = require('./schemas/casinouserschema');
 
 const mongoose = require('mongoose');
+const casinouserschema = require('./schemas/casinouserschema');
 mongoose.connect(process.env.CASINO_MONGODB_URL, {
     useNewUrlParser: true,
     useUnifiedTopology: true
@@ -98,6 +99,7 @@ client.on('message', async (message) => {
             break;
 
         case 'total':
+            total();
             break;
 
         case 'wageredleaderboard':
@@ -145,17 +147,19 @@ const updatebalance = async (args, message) => {
         return;
     }
     console.log('Looking for ID: ' + userID);
-    var customer = await CasinoUser.findOneAndUpdate({ unique_id: userID });
+    var customer = await CasinoUser.findOne({ uniqueid: userID });
 
     if (customer == null) {
-        console.log('ID Doesnt exist, creating & reassigning customer...');
-        createNewUser(userID, message);
-        customer = await CasinoUser.findOne({ unique_id: userID });
+        if (args.length > 0) {
+            console.log('ID Doesnt exist, creating & updating balance of a new customer...');
+            createNewUser(userID, message, parseFloat(args[1]));
+        }
+        customer = await CasinoUser.findOne({ uniqueid: userID });
     }
     if (args.length > 0 && customer != null) {
         console.log('Updating balance of ' + userID + ' by adding ' + args[1]);
         customer.balance += parseFloat(args[1]);
-        const updateCustomer = await CasinoUser.findOneAndUpdate({ unique_id: userID }, { balance: customer.balance });
+        const updateCustomer = await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance });
         message.channel.send('Added ' + args[1] + ' to the balance of ' + args[0] + ' New balance: ' + customer.balance);
     } else if (customer != null) {
         message.channel.send('Invalid deposit: ' + args[1]);
@@ -167,17 +171,18 @@ const displayBalance = async (args, message) => {
     switch (args.length) {
         case 0:
             console.log('no parameters found, searching for the user who typed the command');
-            var customer = await CasinoUser.findOne({ unique_id: message.member.id });
+            var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
             if (customer == null) {
                 message.channel.send('User ' + message.member.user.username + ' (' + message.member.id + ') not found in the database, you need to deposit first.');
                 return;
             }
             console.log(customer.balance);
-            message.channel.send('Balance of ' + member.user.username + ' is ' + customer.balance);
+            message.channel.send('Balance of ' + message.member.user.username + ' is ' + customer.balance);
             break;
 
         case 1:
             if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+                console.log('searching a balance of another user');
                 const userID = getUserID(args[0]);
                 console.log('User ID: ' + userID);
 
@@ -185,7 +190,12 @@ const displayBalance = async (args, message) => {
                     message.channel.send('Invalid user input');
                     return;
                 }
-                customer = await CasinoUser.findOne({ unique_id: userID });
+                if (CasinoUser.exists({ uniqueid: userID })) {
+                    console.log('customer found');
+                    customer = await CasinoUser.findOne({ uniqueid: userID });
+                } else {
+                    console.log('customer not found with ID ' + userID);
+                }
                 if (customer == null) {
                     message.channel.send('User ' + args[0] + ' (' + userID + ') not found in the database, you need to deposit first.');
                     return;
@@ -205,34 +215,40 @@ const clearBalance = async (args, message, member) => {
 
     if (args.length == 0) {
         console.log('no parameters found ,searching the for user who typed the command');
-        await CasinoUser.findOneAndUpdate({ unique_id: member.id, balance: 0 });
-        const checkCustomerBalance = await CasinoUser.findOne({ unique_id: member.id });
+        await CasinoUser.findOneAndUpdate({ uniqueid: member.id, balance: 0 });
+        const checkCustomerBalance = await CasinoUser.findOne({ uniqueid: member.id });
         message.channel.send('Balance of ' + member.user.username + ' is now ' + checkCustomerBalance.balance);
     }
 }
 
-const createNewUser = async (userID, message) => {
-    try {
-        console.log('start of createnewuser: userid: ' + userID);
-        const newCustomer = await CasinoUser.create({
-            uniqueid: userID,
-            balance: 0,
-            totaldeposited: 0,
-            totalwithdrawn: 0,
-            totalwagered: 0,
-            largestbet: 0
+const createNewUser = async (userID, message, firstDeposit) => {
+    console.log('start of createnewuser: userid: ' + userID);
+    const newCustomer = await CasinoUser.create({
+        uniqueid: userID,
+        balance: firstDeposit,
+        totaldeposited: 0,
+        totalwithdrawn: 0,
+        totalwagered: 0,
+        largestbet: 0
+    });
+
+    console.log('new customer formed');
+    const savedUser = await newCustomer.save();
+
+    console.log('new customer created');
+    message.channel.send('New user ' + userID + ' created');
+}
+
+const total = async () => {
+    CasinoUser.find({}, function (err, users) {
+        var userMap = {};
+
+        users.forEach(function (user) {
+            userMap[user._id] = user;
         });
 
-        console.log('new customer formed');
-        const savedUser = await newCustomer.save();
-
-        console.log('new customer created');
-        message.channel.send('New user ' + userID + ' created');
-    } catch (error) {
-        console.log('error' + error);
-    } finally {
-        console.log('well finally ended');
-    }
+        console.log('Giant TEXT: ' + userMap.length);
+    });
 }
 
 const totalWageredLeaderboard = async (userID, message) => {
