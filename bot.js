@@ -49,7 +49,7 @@ client.on('message', async (message) => {
 
         case 'clearbalance':
             if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
-                clearBalance(args, message, message.member);
+                clearBalance(args, message);
             } else {
                 message.channel.send(NO_PERMISSIONS);
             }
@@ -72,15 +72,35 @@ client.on('message', async (message) => {
             break;
 
         case 'flip':
-            if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
-                message.channel.send('**' + message.member.user.username + '** flipped a coin and landed on **' + flip() + '**');
+            var choice = args[0];
+            var amount = args[1];
+            var userID = message.member.id;
+            var flipResult = flip();
+            var mainFlipMessage = '**' + message.member.user.username + '** flipped a coin and landed on **' + flipResult + '**';
+            var customer = await CasinoUser.findOne({ uniqueid: getUserID(userID) });
+
+            if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR) && isTicketChannel(message.channel.name) && args.length == 2 && customer != null) {
+                if (choice.toLowerCase() === flipResult.toLowerCase()) {
+                    const updateCustomer = await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance });
+                    message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ');
+                } else {
+                    message.channel.send(':red_circle:' + mainFlipMessage + ' **Loss**! New balance: ');
+                }
+            } else if (args.length == 2) {
+                message.channel.send('Invalid command syntax, the command is flip choice amount, such as: flip 50 heads');
+            } else if (customer == null) {
+                message.channel.send('User not found in database, please deposit first');
             } else {
                 message.channel.send(NO_PERMISSIONS);
             }
             break;
 
         case 'dice':
-            message.channel.send('** ' + message.member.user.username + ' ** rolled a **' + dice(1, 100) + '**');
+            if (isTicketChannel(message.channel.name)) {
+                message.channel.send('** ' + message.member.user.username + ' ** rolled a **' + dice(1, 100) + '**');
+            } else {
+                message.channel.send('You can only perform this command within tickets');
+            }
             break;
 
         case 'hello':
@@ -108,7 +128,11 @@ client.on('message', async (message) => {
             break;
 
         case 'allbalances':
-            allbalances();
+            if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+                allBalances(message);
+            } else {
+                message.channel.send(NO_PERMISSIONS);
+            }
             break;
 
         case 'wageredleaderboard':
@@ -123,11 +147,14 @@ client.on('message', async (message) => {
             withdrawLeaderboard();
             break;
 
-
         default:
             break;
     }
 });
+
+function isTicketChannel(channelName) {
+    return channelName.startsWith('ticket');
+}
 
 function isNumber(userID) {
     return /^\d+$/.test(userID);
@@ -147,7 +174,11 @@ function getUserID(userTagged) {
     return userTagged.slice(3, userTagged.length - 1);
 }
 
-const updatebalance = async (args, message) => {
+function getUserTag(unique_id) {
+    return '<@' + unique_id + '>';
+}
+
+async function updatebalance(args, message) {
     console.log('User ID: ' + args[0]);
     console.log('Amount: ' + args[1]);
     const userID = getUserID(args[0]);
@@ -175,7 +206,7 @@ const updatebalance = async (args, message) => {
     }
 }
 
-const displayBalance = async (args, message) => {
+async function displayBalance(args, message) {
     console.log('display balance - args length' + args.length);
     switch (args.length) {
         case 0:
@@ -218,19 +249,26 @@ const displayBalance = async (args, message) => {
     }
 }
 
-const clearBalance = async (args, message, member) => {
-    console.log('start of remove balance');
-    console.log('args0 ' + args[0]);
+async function resetBalance(unique_id, message) {
+    await CasinoUser.findOneAndUpdate({ uniqueid: unique_id, balance: 0 });
+    const checkCustomerBalance = await CasinoUser.findOne({ uniqueid: unique_id });
+    message.channel.send('Balance of ' + getUserTag(unique_id) + ' is now ' + checkCustomerBalance.balance);
+}
 
-    if (args.length == 0) {
-        console.log('no parameters found ,searching the for user who typed the command');
-        await CasinoUser.findOneAndUpdate({ uniqueid: member.id, balance: 0 });
-        const checkCustomerBalance = await CasinoUser.findOne({ uniqueid: member.id });
-        message.channel.send('Balance of ' + member.user.username + ' is now ' + checkCustomerBalance.balance);
+async function clearBalance(args, message) {
+    switch (args.length) {
+        case 0: // clearing own balance as an admin
+            console.log('member id: ' + message.member.id);
+            resetBalance(message.member.id, message);
+            break;
+        case 1: // clearing a users balance
+            console.log('member id: ' + getUserID(args[0]));
+            resetBalance(getUserID(args[0]), message);
+            break;
     }
 }
 
-const createNewUser = async (userID, message, firstWager) => {
+async function createNewUser(userID, message, firstWager) {
     console.log('start of createnewuser: userid: ' + userID);
     const newCustomer = await CasinoUser.create({
         uniqueid: userID,
@@ -242,30 +280,28 @@ const createNewUser = async (userID, message, firstWager) => {
     });
 
     console.log('new customer formed');
-    const savedUser = await newCustomer.save();
+    await newCustomer.save();
 
     console.log('new customer created');
     message.channel.send('New user ' + userID + ' created with a first wager of ' + firstWager);
 }
 
-const allbalances = async () => {
-    CasinoUser.find({}, function (err, users) {
-        var userMap = {};
-
-        users.forEach(function (user) {
-            userMap[user._id] = user;
-        });
-
-        console.log('Giant TEXT: ' + userMap.length);
-    });
+async function allBalances(message) {
+    var sampleText = '';
+    const sorted = CasinoUser.find().sort({ balance: -1 });
+    const cursor = sorted.cursor();
+    for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
+        sampleText += getUserTag(doc.uniqueid) + '**' + doc.balance + '**\n';
+    }
+    message.channel.send('**CUSTOMERS BALANCE TABLE**\n' + sampleText);
 }
 
-const totalWageredLeaderboard = async (userID, message) => {
+async function totalWageredLeaderboard(userID, message) {
     // await 
 }
-const depositTotalLeaderboard = async (userID, message) => {
+async function depositLeaderboard(userID, message) {
     //  await 
 }
-const withdrawTotalLeaderboard = async (userID, message) => {
+async function withdrawLeaderboard(userID, message) {
     //  await 
 }
