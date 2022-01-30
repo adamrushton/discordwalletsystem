@@ -74,20 +74,24 @@ client.on('message', async (message) => {
         case 'flip':
             var choice = args[0];
             var amount = args[1];
-            var userID = message.member.id;
-            var flipResult = flip();
-            var mainFlipMessage = '**' + message.member.user.username + '** flipped a coin and landed on **' + flipResult + '**';
-            var customer = await CasinoUser.findOne({ uniqueid: getUserID(userID) });
+            var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
 
-            if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR) && isTicketChannel(message.channel.name) && args.length == 2 && customer != null) {
+            if (isTicketChannel(message.channel.name) && args.length == 2 && customer != null && isHeadsOrTails(args[0])) {
+                var flipResult = flip();
+                var mainFlipMessage = '**' + message.member.user.username + '** flipped a coin and landed on **' + flipResult + '**';
                 if (choice.toLowerCase() === flipResult.toLowerCase()) {
-                    const updateCustomer = await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance });
-                    message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ');
+                    var updatedBalance = customer.balance + parseFloat(amount);
+                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance });
+                    message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ' + updatedBalance);
                 } else {
-                    message.channel.send(':red_circle:' + mainFlipMessage + ' **Loss**! New balance: ');
+                    var updatedBalance = customer.balance - parseFloat(amount);
+                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance });
+                    message.channel.send(':red_circle:' + mainFlipMessage + ' **Loss**! New balance: ' + updatedBalance);
                 }
-            } else if (args.length == 2) {
-                message.channel.send('Invalid command syntax, the command is flip choice amount, such as: flip 50 heads');
+            } else if (!isHeadsOrTails(args[0])) {
+                message.channel.send('Invalid choice: ' + args[0] + ' you have to write heads or tails');
+            } else if (args.length > 2) {
+                message.channel.send('Invalid command syntax, example usage: flip 50 heads');
             } else if (customer == null) {
                 message.channel.send('User not found in database, please deposit first');
             } else {
@@ -152,6 +156,10 @@ client.on('message', async (message) => {
     }
 });
 
+function isHeadsOrTails(option) {
+    return option.toLowerCase() == 'heads' || option.toLowerCase() == 'tails';
+}
+
 function isTicketChannel(channelName) {
     return channelName.startsWith('ticket');
 }
@@ -170,6 +178,7 @@ function flip() {
     return coinflip[dice(0, 1)];
 }
 
+// Note this function is not to be called for message.member.id, only when dealing players @
 function getUserID(userTagged) {
     return userTagged.slice(3, userTagged.length - 1);
 }
