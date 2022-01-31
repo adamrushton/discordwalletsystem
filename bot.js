@@ -25,7 +25,6 @@ var potAmount = 0;
 var cent = 100;
 // end
 
-
 mongoose.connect(process.env.CASINO_MONGODB_URL, {
     useNewUrlParser: true,
     useUnifiedTopology: true
@@ -43,10 +42,6 @@ client.on('message', async (message) => {
     const args = message.content.slice().trim().split(' ');
     const command = args.shift().toLowerCase();
     if (message.author.bot) return; // stop bot from spamming
-
-    console.log('args: ' + args);
-    console.log('command: ' + command);
-    console.log('message content: ' + message.content);
 
     switch (command) {
         case 'updatebalance':
@@ -85,24 +80,26 @@ client.on('message', async (message) => {
             var choice = args[0];
             var amount = parseFloat(args[1]);
             var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
-            var takeBetFromBalance = customer.balance - (parseFloat(amount));
-
-            if (isTicketChannel(message.channel.name) && args.length == 2 && customer != null && isHeadsOrTails(args[0])) {
+            var takeBetFromBalance = customer.balance - amount;
+            var updatedWager = customer.totalwagered + amount;
+            if (isTicketChannel(message.channel.name) && args.length == 2 && customer != null && isHeadsOrTails(args[0]) && customer.balance >= amount) {
                 var flipResult = flip();
                 var mainFlipMessage = '**' + message.member.user.username + '** flipped a coin and landed on **' + flipResult + '**';
                 if (choice.toLowerCase() === flipResult.toLowerCase()) {
-                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: takeBetFromBalance });
+                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: takeBetFromBalance, totalwagered: updatedWager });
                     console.log('set their balance from: ' + takeBetFromBalance + ' to ' + takeBetFromBalance);
-                    console.log('victory amount: ' + getVictoryAmount(parseFloat(amount)));
-                    var updatedBalance = takeBetFromBalance + getVictoryAmount(parseFloat(amount));
-                    console.log('updated balance: ' + parseFloat(updatedBalance));
-                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: parseFloat(updatedBalance) });
+                    console.log('victory amount: ' + getVictoryAmount(amount));
+                    var updatedBalance = takeBetFromBalance + getVictoryAmount(amount);
+                    console.log('updated balance: ' + updatedBalance);
+                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance, totalwagered: updatedWager });
                     message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ' + updatedBalance + '(' + percentage + '%)');
                 } else {
                     var updatedBalance = customer.balance - parseFloat(amount);
                     await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance });
                     message.channel.send(':red_circle:' + mainFlipMessage + ' **Loss**! New balance: ' + updatedBalance);
                 }
+            } else if (customer.balance < amount) {
+                message.channel.send('You need to deposit more to bet this amount');
             } else if (!isHeadsOrTails(args[0])) {
                 message.channel.send('Invalid choice: ' + args[0] + ' you have to write heads or tails');
             } else if (args.length > 2) {
@@ -152,10 +149,6 @@ client.on('message', async (message) => {
             } else {
                 message.channel.send(NO_PERMISSIONS);
             }
-            break;
-
-        case 'wageredleaderboard':
-            totalWageredLeaderboard();
             break;
 
         case 'depositleaderboard':
@@ -282,18 +275,15 @@ async function resetBalance(unique_id, message) {
 async function clearBalance(args, message) {
     switch (args.length) {
         case 0: // clearing own balance as an admin
-            console.log('member id: ' + message.member.id);
             resetBalance(message.member.id, message);
             break;
         case 1: // clearing a users balance
-            console.log('member id: ' + getUserID(args[0]));
             resetBalance(getUserID(args[0]), message);
             break;
     }
 }
 
 async function createNewUser(userID, message, firstWager) {
-    console.log('start of createnewuser: userid: ' + userID);
     const newCustomer = await CasinoUser.create({
         uniqueid: userID,
         balance: firstWager,
@@ -312,14 +302,21 @@ async function allBalances(message) {
     const sorted = CasinoUser.find().sort({ balance: -1 });
     const cursor = sorted.cursor();
     for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
-        sampleText += getUserTag(doc.uniqueid) + '**' + doc.balance + '**\n';
+        sampleText += getUserTag(doc.uniqueid) + '**' + doc.balance + 'm**\n';
     }
     message.channel.send('**CUSTOMERS BALANCE TABLE**\n' + sampleText);
 }
 
-async function totalWageredLeaderboard(userID, message) {
-    // await 
+async function totalWageredLeaderboard(message) {
+    var sampleText = '';
+    const sorted = CasinoUser.find().sort({ totalwagered: -1 });
+    const cursor = sorted.cursor();
+    for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
+        sampleText += getUserTag(doc.uniqueid) + '**' + doc.totalwagered + 'm**\n';
+    }
+    message.channel.send('**CUSTOMERS TOTAL WAGERED TABLE**\n' + sampleText);
 }
+
 async function depositLeaderboard(userID, message) {
     //  await 
 }
@@ -343,6 +340,15 @@ function getVictoryAmount(bet) {
     return parseFloat(potAmount - amountToSubtract);
 }
 
-async function getPercentage() {
-    return percentage;
+function deposit(args, message) {
+    switch (args.length) {
+        case 0:
+            message.channel.send('@here ' + message.member + ' is looking to deposit');
+            break;
+        case 1:
+            if (isNumber(args[0])) {
+                message.channel.send('@here ' + message.member + ' is looking to deposit ' + args[0] + 'm');
+            }
+            break;
+    }
 }
