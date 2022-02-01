@@ -55,7 +55,7 @@ client.on('message', async (message) => {
     switch (command) {
         case 'help':
         case 'commands':
-            commands();
+            commands(message);
             break;
 
         case 'updatebalance':
@@ -456,5 +456,35 @@ function deposit(args, message) {
 }
 
 function commands(message) {
+    var helpText = "**Game specific commands**\n";
+    helpText += "**updatebalance <tagged user> <amount> - add balance to a user\n";
+    helpText += "** clearbalance <tagged user>          - clear a users balance to 0\n";
+    helpText += "**clearbalance                         - clear own balance\n";
+    helpText += "**allbalances                          - show all balances\n";
+    helpText += "**deposit                              - a user is looking to deposit\n";
+    helpText += "** deposit <amount>                    - a user is looking to deposit <amount>\n";
+    helpText += "**balance                              - shows your balance\n";
+    helpText += "**balance <tagged user>                - shows tagged users balance\n";
+    helpText += "**leaderboard                          - shows total wagered leaderboard\n";
+    helpText += "**flip <heads/tails> <amount>          - flips a coin for heads or tails\n";
+    helpText += "**higher <amount>                      - play against bot for who gets highest number wins\n";
+    helpText += "**lower <amount>                       - play against bot for who gets lowest number wins\n";
+    helpText += "** 55x2 <amount>                       - 1-54 house win, 55-100 user win\n";
 
+    helpText += "**To-do features to finish off:**\n";
+    helpText += "**win                                  - manual host confirming a user wins\n";
+    helpText += "** loss                                - manual host confirming a user loses\n";
+    helpText += "**streak                               - show a users win/loss streak\n";
+    helpText += "**largestwinstreak                     - show a users largest win streak\n";
+    helpText += "** largestlossstreak                   - show a users largest loss streak\n";
+    helpText += "** depositleaderboard                  - show deposits leaderboard\n";
+    helpText += "**withdrawleaderboard                  - show withdraws leaderboard\n";
+
+    helpText += "**Miscellaneous commands:**\n";
+    helpText += "**id									- writes your id \n";
+    helpText += "**johnny                               - sends a silly message\n";
+    helpText += "** hello                               - silly message hello johnny\n";
+    helpText += "**help                                 - shows you this commands list\n";
+    helpText += "**commands                             - shows you this commands list\n";
+    message.channel.send(helpText);
 }
