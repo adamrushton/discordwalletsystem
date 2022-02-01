@@ -19,7 +19,6 @@ Help Command with a list of all commands and available syntaxs
 const NO_PERMISSIONS = 'You do not have permission to use this command in this channel';
 const DICE_DRAW = ':yellow_circle: **Draw**';
 const { Client, Intents, Permissions, MessageEmbed } = require('discord.js');
-const pagination = require('discord.js-pagination');
 
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 const CasinoUser = require('./schemas/casinouserschema');
@@ -458,36 +457,48 @@ function deposit(args, message) {
 }
 
 function commands(message) {
-    var helpText = "**Game specific commands**\n";
-    helpText += "**updatebalance <tagged user> <amount>** - add balance to a user\n";
-    helpText += "**clearbalance <tagged user>**           - clear a users balance to 0\n";
-    helpText += "**clearbalance**                         - clear own balance\n";
-    helpText += "**allbalances**                          - show all balances\n";
-    helpText += "**deposit**  *                           - a user is looking to deposit\n";
-    helpText += "**deposit <amount>**                     - a user is looking to deposit <amount>\n";
-    helpText += "**balance**                              - shows your balance\n";
-    helpText += "**balance <tagged user>**                - shows tagged users balance\n";
-    helpText += "**leaderboard**                          - shows total wagered leaderboard\n";
-    helpText += "**flip <heads/tails> <amount>**          - flips a coin for heads or tails\n";
-    helpText += "**higher <amount>**                      - play against bot for who gets highest number wins\n";
-    helpText += "**lower <amount>**                       - play against bot for who gets lowest number wins\n";
-    helpText += "**55x2 <amount>**                        - 1-54 house win, 55-100 user win\n";
 
-    helpText += "**To-do features to finish off:**\n";
-    helpText += "**win**                                  - manual host confirming a user wins\n";
-    helpText += "**loss**                                 - manual host confirming a user loses\n";
-    helpText += "**streak**                               - show a users win/loss streak\n";
-    helpText += "**largestwinstreak**                     - show a users largest win streak\n";
-    helpText += "**largestlossstreak**                    - show a users largest loss streak\n";
-    helpText += "**depositleaderboard**                   - show deposits leaderboard\n";
-    helpText += "**withdrawleaderboard**                  - show withdraws leaderboard\n";
+    // inside a command, event listener, etc.
+    const commandsListEmbed = new MessageEmbed()
+        .setColor('#0099ff')
+        .setTitle('Discord Bot Wallet System with Games')
+        .setURL('https://github.com/adamrushton/discordwalletsystem')
+        .setAuthor({ name: 'Adam Rushton', iconURL: 'https://i.imgur.com/AfFp7pu.png', url: 'https://acornserver.com' })
+        .setDescription('Discord Bot Wallet System')
+        .setThumbnail('https://i.imgur.com/AfFp7pu.png')
+        .addFields(
+            { name: 'Commands List', value: 'Find below a list of all commands' },
+            { name: 'Update a users balance', value: 'updatebalance <tagged user> <amount>', },
+            { name: 'Clear a users balance', value: 'clearbalance <tagged user>', },
+            { name: 'Clear your balance', value: 'clearbalance', },
+            { name: 'Display all recorded balances', value: 'allbalances', },
+            { name: 'User Deposit', value: 'deposit', },
+            { name: 'User Deposit a specific amount', value: 'deposit <amount>', },
+            { name: 'Display your balance', value: 'balance', },
+            { name: 'Display a tagged users balance', value: 'balance <tagged user>', },
+            { name: 'Wagered Leaderboard', value: 'leaderboard', },
+            { name: 'Coinflipping', value: 'flip <heads/tails> <amount>', },
+            { name: 'Dicing Highest Wins Game', value: 'higher <amount>', },
+            { name: 'Dicing Lowest Wins Game', value: 'lower <amount>', },
+            { name: 'Dicing 55x2 Game', value: '55x2 <amount>', },
 
-    helpText += "**Miscellaneous commands:**\n";
-    helpText += "**id**								   	  - writes your id \n";
-    helpText += "**johnny**                               - sends a silly message\n";
-    helpText += "**hello**                                - silly message hello johnny\n";
-    helpText += "**help**                                 - shows you this commands list\n";
-    helpText += "**commands**                             - shows you this commands list\n";
-    message.channel.send(helpText);
+            { name: 'Miscellaneous Commands', value: 'Find below a list of none-related commands', },
+            { name: 'Obtain your Unique ID', value: 'id', },
+            { name: 'Johnny Related', value: 'johnny | hello', },
+            { name: 'Get Help/Display Commands', value: 'help | commands', },
 
+            { name: 'Finish Off Commands', value: 'Find below a list of commands still being worked on', },
+            { name: 'User wins a Duel', value: 'win', },
+            { name: 'User loses a Duel', value: 'loss', },
+            { name: 'Your win or loss streak', value: 'streak', },
+            { name: 'Win or loss streak of a tagged user', value: 'streak <tagged user>', },
+            { name: 'User win or loss streak', value: 'streak', },
+            { name: 'Deposit Leaderboard', value: 'depositleaderboard', },
+            { name: 'Withdraw Leaderboard', value: 'withdrawleaderboard', },
+        )
+        .setImage('https://i.imgur.com/AfFp7pu.png')
+        .setTimestamp()
+        .setFooter({ text: 'RIP Duel Arena 17-11-2021', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
+
+    message.channel.send({ embeds: [commandsListEmbed] });
 }
