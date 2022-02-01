@@ -3,14 +3,22 @@ require('dotenv').config();
 /*
 TO-DO List
 Dice and Coinflip should update balance
+Dice ideas
+dice <game> <amount>
+dice 55x2 100
+higher, lower or whatever the other game is would require either a host or the bot to roll too
+
 stake <amount> should be added
-win/loss should update balance
+win/loss should update balance - if this is hard then 
 dice amount gamenumber
 coinflip amount heads/tails
 - check for enough funds
+
+Help Command with a list of all commands and available syntaxs
 */
-const NO_PERMISSIONS = 'You do not have permission to use this command';
-const { Client, Intents, Permissions } = require('discord.js');
+const NO_PERMISSIONS = 'You do not have permission to use this command in this channel';
+const DICE_DRAW = ':yellow_circle: **Draw**';
+const { Client, Intents, Permissions, Message } = require('discord.js');
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 const CasinoUser = require('./schemas/casinouserschema');
 const mongoose = require('mongoose');
@@ -32,6 +40,7 @@ mongoose.connect(process.env.CASINO_MONGODB_URL, {
     console.log('Connected to DB');
 }).catch((err) => console.log(err));
 
+
 client.login(process.env.CASINO_TOKEN);
 
 client.on('ready', async () => {
@@ -44,6 +53,11 @@ client.on('message', async (message) => {
     if (message.author.bot) return; // stop bot from spamming
 
     switch (command) {
+        case 'help':
+        case 'commands':
+            commands();
+            break;
+
         case 'updatebalance':
             if (message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
                 updatebalance(args, message);
@@ -80,42 +94,49 @@ client.on('message', async (message) => {
             var choice = args[0];
             var amount = parseFloat(args[1]);
             var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
-            var takeBetFromBalance = customer.balance - amount;
-            var updatedWager = customer.totalwagered + amount;
-            if (isTicketChannel(message.channel.name) && args.length == 2 && customer != null && isHeadsOrTails(args[0]) && customer.balance >= amount) {
+            if (isTicketChannel(message.channel.name) && args.length == 2 && customer != null && customer.balance >= amount && isHeadsOrTails(args[0])) {
                 var flipResult = flip();
                 var mainFlipMessage = '**' + message.member.user.username + '** flipped a coin and landed on **' + flipResult + '**';
+                message.channel.send(mainFlipMessage);
                 if (choice.toLowerCase() === flipResult.toLowerCase()) {
-                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: takeBetFromBalance, totalwagered: updatedWager });
-                    console.log('set their balance from: ' + takeBetFromBalance + ' to ' + takeBetFromBalance);
-                    console.log('victory amount: ' + getVictoryAmount(amount));
-                    var updatedBalance = takeBetFromBalance + getVictoryAmount(amount);
-                    console.log('updated balance: ' + updatedBalance);
-                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance, totalwagered: updatedWager });
-                    message.channel.send(':green_circle: ' + mainFlipMessage + ' **Win**! New balance: ' + updatedBalance + '(' + percentage + '%)');
+                    userWins(message, command, customer, amount);
                 } else {
-                    var updatedBalance = customer.balance - parseFloat(amount);
-                    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance });
-                    message.channel.send(':red_circle:' + mainFlipMessage + ' **Loss**! New balance: ' + updatedBalance);
+                    userLoses(message, customer, amount);
                 }
-            } else if (customer.balance < amount) {
-                message.channel.send('You need to deposit more to bet this amount');
             } else if (!isHeadsOrTails(args[0])) {
                 message.channel.send('Invalid choice: ' + args[0] + ' you have to write heads or tails');
-            } else if (args.length > 2) {
-                message.channel.send('Invalid command syntax, example usage: flip 50 heads');
-            } else if (customer == null) {
-                message.channel.send('User not found in database, please deposit first');
             } else {
-                message.channel.send(NO_PERMISSIONS);
+                writeInvalidBet(args, 2, message, amount, customer);
             }
             break;
 
-        case 'dice':
-            if (isTicketChannel(message.channel.name)) {
-                message.channel.send('** ' + message.member.user.username + ' ** rolled a **' + dice(1, 100) + '**');
+        case 'higher':
+            var amount = parseFloat(args[0]);
+            var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
+            if (isTicketChannel(message.channel.name) && args.length == 1 && customer != null && customer.balance >= amount) {
+                higher(message, command, customer, amount);
             } else {
-                message.channel.send('You can only perform this command within tickets');
+                writeInvalidBet(args, 1, message, amount, customer);
+            }
+            break;
+
+        case 'lower':
+            var amount = parseFloat(args[0]);
+            var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
+            if (isTicketChannel(message.channel.name) && args.length == 1 && customer != null && customer.balance >= amount) {
+                lower(message, command, customer, amount);
+            } else {
+                writeInvalidBet(args, 1, message, amount, customer);
+            }
+            break;
+
+        case '55x2':
+            var amount = parseFloat(args[0]);
+            var customer = await CasinoUser.findOne({ uniqueid: message.member.id });
+            if (isTicketChannel(message.channel.name) && args.length == 1 && customer != null && customer.balance >= amount) {
+                fivefivex2(message, command, customer, amount);
+            } else {
+                writeInvalidBet(args, 1, message, amount, customer);
             }
             break;
 
@@ -163,6 +184,20 @@ client.on('message', async (message) => {
             break;
     }
 });
+
+function writeInvalidBet(args, amountOfArgsThereShouldBe, message, amount, customer) {
+    if (args.length != amountOfArgsThereShouldBe) {
+        message.channel.send('Invalid syntax for higher. Command: higher <amount>');
+    } else if (customer.balance < amount) {
+        message.channel.send('You need to deposit more to bet this amount');
+    } else if (!isNumber(amount)) {
+        message.channel.send('Invalid number: ' + amount);
+    } else if (customer == null) {
+        message.channel.send('User not found in database, please deposit first');
+    } else {
+        message.channel.send(NO_PERMISSIONS);
+    }
+}
 
 function isHeadsOrTails(option) {
     return option.toLowerCase() == 'heads' || option.toLowerCase() == 'tails';
@@ -234,7 +269,7 @@ async function displayBalance(args, message) {
                 return;
             }
             console.log(customer.balance);
-            message.channel.send('Balance of ' + message.member.user.username + ' is ' + customer.balance);
+            message.channel.send('Balance of ' + getUserTag(message.member.id) + ' is ' + customer.balance);
             break;
 
         case 1:
@@ -254,7 +289,7 @@ async function displayBalance(args, message) {
                     console.log('customer not found with ID ' + userID);
                 }
                 if (customer == null) {
-                    message.channel.send('User ' + args[0] + ' (' + userID + ') not found in the database, you need to deposit first.');
+                    message.channel.send('User ' + args[0] + ' not found in the database, they need to deposit first.');
                     return;
                 }
                 console.log(customer.balance);
@@ -324,20 +359,87 @@ async function withdrawLeaderboard(userID, message) {
     //  await 
 }
 
-function getVictoryAmount(bet) {
-    potAmount = bet + bet;
-    if (potAmount >= 0.0 && potAmount < 1000.0) {
-        percentage = 5;
-    } else if (potAmount >= 1000.0 && potAmount < 2000.0) {
-        percentage = 7.5;
-    } else if (potAmount >= 2000.0 && potAmount < 10000.0) {
-        percentage = 10;
-    } else if (potAmount >= 10000.0) {
-        percentage = 12.5;
+function roll(username, message) {
+    var result = dice(1, 100);
+    message.channel.send('**' + username + '** rolled a **' + result + '**');
+    return result;
+}
+
+async function userWins(message, command, customer, amount) {
+    if (customer == null) {
+        console.log('customer null in user wins');
     }
-    multiplier = percentage / cent;
-    amountToSubtract = potAmount * multiplier;
-    return parseFloat(potAmount - amountToSubtract);
+    var takeBetFromBalance = customer.balance - amount;
+    var updatedWager = customer.totalwagered + amount;
+    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: takeBetFromBalance, totalwagered: updatedWager });
+    var updatedBalance = takeBetFromBalance + getVictoryAmount(command, amount);
+    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance, totalwagered: updatedWager });
+    if (command != '55x2') {
+        message.channel.send(':green_circle: **Win**! New balance: ' + updatedBalance + '(' + percentage + '%)');
+    } else {
+        message.channel.send(':green_circle: **Win**! New balance: ' + updatedBalance);
+    }
+}
+
+async function userLoses(message, customer, amount) {
+    var updatedBalance = customer.balance - parseFloat(amount);
+    var updatedWager = customer.totalwagered + amount;
+    await CasinoUser.findOneAndUpdate({ uniqueid: message.member.id }, { balance: updatedBalance, totalwagered: updatedWager });
+    message.channel.send(':red_circle: **Loss**! New balance: ' + updatedBalance);
+}
+
+function higher(message, command, customer, amount) {
+    var hostResult = roll('Host', message);
+    var userResult = roll(getUserTag(message.member.id), message);
+    if (userResult > hostResult) { // User win
+        userWins(message, command, customer, amount);
+    } else if (userResult == hostResult) { // Draw, both rolling same number
+        message.channel.send(DICE_DRAW);
+    } else { // Otherwise it's a loss, (rolled lower)
+        userLoses(message, customer, amount);
+    }
+}
+
+function lower(message, command, customer, amount) {
+    var hostResult = roll('Host', message);
+    var userResult = roll(getUserTag(message.member.id), message);
+    if (userResult < hostResult) { // User win
+        userWins(message, command, customer, amount);
+    } else if (userResult == hostResult) { // Draw, both rolling same number
+        message.channel.send(DICE_DRAW);
+    } else { // Otherwise it's a loss, (rolled higher)
+        userLoses(message, customer, amount)
+    }
+}
+
+async function fivefivex2(message, command, customer, amount) {
+    var diceResult = dice(1, 100);
+    message.channel.send('**' + getUserTag(message.member.id) + '** rolled a **' + diceResult + '**');
+    if (diceResult >= 55) { // User win if 55 or higher
+        userWins(message, command, customer, amount);
+    } else {
+        userLoses(message, customer, amount);
+    }
+}
+
+function getVictoryAmount(command, bet) {
+    potAmount = bet + bet;
+    if (command != '55x2') {
+        if (potAmount >= 0.0 && potAmount < 1000.0) {
+            percentage = 5;
+        } else if (potAmount >= 1000.0 && potAmount < 2000.0) {
+            percentage = 7.5;
+        } else if (potAmount >= 2000.0 && potAmount < 10000.0) {
+            percentage = 10;
+        } else if (potAmount >= 10000.0) {
+            percentage = 12.5;
+        }
+        multiplier = percentage / cent;
+        amountToSubtract = potAmount * multiplier;
+        return parseFloat(potAmount - amountToSubtract);
+    } else {
+        return parseFloat(potAmount);
+    }
 }
 
 function deposit(args, message) {
@@ -351,4 +453,8 @@ function deposit(args, message) {
             }
             break;
     }
+}
+
+function commands(message) {
+
 }
