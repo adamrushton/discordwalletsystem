@@ -25,6 +25,10 @@ const casinoSchema = new mongoose.Schema({
     largestbet: {
         type: Number,
         require: true
+    },
+    streak: {
+        type: Number,
+        require: true
     }
 },
     { collection: process.env.CASINO_DATABASE_NAME }
