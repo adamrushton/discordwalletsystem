@@ -235,19 +235,19 @@ async function updatebalance(args, message) {
         return;
     }
     if (args.length > 0 && customer != null) {
-        var depositAmount = parseFloat(args[1]);
-        customer.balance += depositAmount;
-        if (depositAmount > 0) {
-            customer.totaldeposited += depositAmount;
+        var updateAmount = parseFloat(args[1]);
+        customer.balance += updateAmount;
+        if (updateAmount > 0) {
+            customer.totaldeposited += updateAmount;
             await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance, totaldeposited: customer.totaldeposited });
             message.channel.send('Deposited ' + args[1] + ' to the bank of ' + args[0] + ' New balance: ' + customer.balance);
         } else {
-            customer.totalwithdrawn += depositAmount;
-            await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance, totaldeposited: customer.totaldeposited });
+            customer.totalwithdrawn += updateAmount;
+            await CasinoUser.findOneAndUpdate({ uniqueid: userID }, { balance: customer.balance, totalwithdrawn: customer.totalwithdrawn });
             message.channel.send('Withdrawn ' + args[1] + ' from the bank of ' + args[0] + ' New balance: ' + customer.balance);
         }
     } else if (customer != null) {
-        message.channel.send('Invalid deposit: ' + args[1]);
+        message.channel.send('Invalid update: ' + args[1]);
     }
 }
 
@@ -348,7 +348,7 @@ async function depositLeaderboard(message) {
 
 async function withdrawLeaderboard(message) {
     var sampleText = '';
-    const sorted = CasinoUser.find().sort({ totalwithdrawn: -1 });
+    const sorted = CasinoUser.find().sort({ totalwithdrawn: 1 });
     const cursor = sorted.cursor();
     for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
         sampleText += getUserTag(doc.uniqueid) + '**' + doc.totalwithdrawn + 'm**\n';
