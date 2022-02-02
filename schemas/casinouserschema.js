@@ -10,6 +10,10 @@ const casinoSchema = new mongoose.Schema({
         type: Number,
         require: true
     },
+    pendingstake: {
+        type: Number,
+        require: true
+    },
     totaldeposited: {
         type: Number,
         require: true
