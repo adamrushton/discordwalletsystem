@@ -1,5 +1,5 @@
 # discordwalletsystem
-
+Discord Wallet & Casino automating games and manual win loss recording for Old School Runescape Stakes
 **Commands List**
 
 Find below a list of all commands
