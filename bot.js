@@ -1,10 +1,11 @@
 require('dotenv').config();
 
 /*
-Remaining
 Withdraw should check balance to make sure that they have enough balance to withdraw the amount they've said
-Any commands have their own meethod so the switch is clean
+Any commands have their own method so the switch is clean
 Clean up code (object oriented)
+Test Code
+Make Read Me professional
 */
 
 const { Client, Intents, Permissions, MessageEmbed } = require('discord.js');
